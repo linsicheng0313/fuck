@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>反爬机制测试 - 林思成</title>
+    <style>
+        /* 全局样式 - 可爱黄蓝配色 */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: "Comic Sans MS", "幼圆", "微软雅黑", sans-serif;
+        }
+        
+        body {
+            background: linear-gradient(135deg, #fff9c4, #bbdefb);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            color: #333;
+        }
+        
+        /* 可爱卡片样式 */
+        .card {
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            text-align: center;
+            max-width: 600px;
+            border: 5px solid #ffeb3b;
+        }
+        
+        /* 标题样式 */
+        h1 {
+            color: #1976d2;
+            font-size: 2.5rem;
+            margin-bottom: 20px;
+            text-shadow: 2px 2px 0 #fff59d;
+        }
+        
+        /* 表情包样式 */
+        .emoji {
+            font-size: 5rem;
+            margin: 20px 0;
+        }
+        
+        /* 文本样式 */
+        .text {
+            font-size: 1.2rem;
+            line-height: 1.8;
+            color: #424242;
+            margin-bottom: 30px;
+        }
+        
+        /* 作者信息 */
+        .author {
+            color: #1976d2;
+            font-weight: bold;
+            font-size: 1.1rem;
+        }
+        
+        /* 解锁内容样式 */
+        .unlock-content {
+            display: none;
+            background: #fff;
+            border-radius: 15px;
+            padding: 30px;
+            margin-top: 20px;
+            border: 3px solid #1976d2;
+        }
+        
+        /* 频率限制提示 */
+        .rate-limit-alert {
+            display: none;
+            background: #ffcdd2;
+            color: #c62828;
+            padding: 20px;
+            border-radius: 15px;
+            margin-bottom: 20px;
+            border: 2px solid #c62828;
+            font-weight: bold;
+        }
+        
+        /* 错误提示样式 */
+        .error-text {
+            color: #c62828;
+            font-weight: bold;
+            animation: shake 0.5s ease;
+        }
+        
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-5px); }
+            75% { transform: translateX(5px); }
+        }
+        
+        /* 响应式设计 */
+        @media (max-width: 768px) {
+            .card {
+                padding: 20px;
+            }
+            h1 {
+                font-size: 2rem;
+            }
+            .emoji {
+                font-size: 4rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- 频率限制提示 -->
+    <div class="rate-limit-alert" id="rateLimitAlert">
+        🚨 您访问的频率过高已经超过此网站的协议 🚨
+    </div>
+
+    <div class="card" id="mainCard">
+        <div class="emoji" id="mainEmoji">🚫</div>
+        <h1 id="mainTitle">这是一个反爬机制的测试</h1>
+        <p class="text" id="mainText">
+            检测到普通访问模式！<br>
+            本网站配备高级反爬机制，<br>
+            只有携带正确API的请求才能解锁完整内容哦～😜
+        </p>
+        <p class="author">作者：林思成</p>
+        
+        <!-- 解锁后的内容（可被爬取） -->
+        <div class="unlock-content" id="unlockContent">
+            <div class="emoji">🎉</div>
+            <h1>恭喜解锁成功！</h1>
+            <p class="text">
+                API验证通过 ✅<br>
+                你成功突破了反爬机制！<br>
+                以下是可爬取的网站内容：
+            </p>
+            <!-- 可被爬取的核心内容 -->
+            <div id="crawlableContent">
+                <h2 style="color: #1976d2; margin: 15px 0;">📚 网站核心数据</h2>
+                <p class="text">• 网站名称：反爬测试站</p>
+                <p class="text">• 作者：林思成</p>
+                <p class="text">• 版本：v1.0</p>
+                <p class="text">• 描述：这是一个带有高级反爬机制的测试网站</p>
+                <p class="text">• 测试数据：123456 | abcdef | 0313</p>
+            </div>
+        </div>
+        
+        <!-- 移除普通访问时的API输入框，仅保留URL参数验证方式 -->
+    </div>
+
+    <script>
+        // 存储API密钥
+        const VALID_API = "0313";
+        // 频率限制配置：每秒最多10次访问
+        const RATE_LIMIT = 10; // 次/秒
+        const RATE_WINDOW = 1000; // 时间窗口（毫秒）
+        
+        // 访问记录存储
+        let visitTimestamps = [];
+        
+        // 页面加载时执行反爬检测
+        document.addEventListener('DOMContentLoaded', function() {
+            // 记录本次访问时间
+            recordVisit();
+            
+            // 检查访问频率
+            if (checkRateLimit()) {
+                // 触发频率限制
+                showRateLimitAlert();
+                return; // 终止后续逻辑
+            }
+            
+            // 1. 检测URL参数中的API（唯一的验证方式）
+            const urlParams = new URLSearchParams(window.location.search);
+            const apiFromUrl = urlParams.get('api');
+            
+            // 2. 检测Cookie中的API（验证后自动保存）
+            const apiFromCookie = getCookie('api_key');
+            
+            // 3. JS环境检测（检测是否为爬虫环境）
+            const isCrawler = detectCrawler();
+            
+            // 如果是爬虫且没有正确API，显示拒绝提示
+            if (isCrawler && ![apiFromUrl, apiFromCookie].includes(VALID_API)) {
+                showAntiCrawlPage();
+            } 
+            // 如果有正确API，解锁内容
+            else if ([apiFromUrl, apiFromCookie].includes(VALID_API)) {
+                unlockContent();
+            }
+        });
+        
+        // 解锁完整内容（可被爬取）
+        function unlockContent() {
+            document.getElementById('mainEmoji').textContent = '✅';
+            document.getElementById('mainTitle').textContent = '反爬机制验证通过！';
+            document.getElementById('mainText').innerHTML = '你成功通过了所有反爬检测～<br>下方内容可正常爬取！😊';
+            document.getElementById('unlockContent').style.display = 'block';
+            
+            // 移除所有反爬保护，确保内容可被爬取
+            document.body.style.opacity = 1;
+            document.getElementById('crawlableContent').style.display = 'block';
+            
+            // 验证通过后设置Cookie，方便后续访问
+            setCookie('api_key', VALID_API, 1);
+        }
+        
+        // 显示反爬页面（拒绝爬虫）
+        function showAntiCrawlPage() {
+            document.getElementById('mainEmoji').textContent = '🚨';
+            document.getElementById('mainTitle').textContent = '⚠️ 检测到爬虫访问！';
+            document.getElementById('mainText').innerHTML = '<span class="error-text">此网站强烈拒绝你的爬虫！</span>';
+        }
+        
+        // 显示频率限制提示
+        function showRateLimitAlert() {
+            document.getElementById('rateLimitAlert').style.display = 'block';
+            document.getElementById('mainCard').style.opacity = 0.5;
+        }
+        
+        // 记录访问时间
+        function recordVisit() {
+            const now = Date.now();
+            visitTimestamps.push(now);
+            
+            // 清理过期的记录
+            visitTimestamps = visitTimestamps.filter(timestamp => now - timestamp < RATE_WINDOW);
+            
+            // 存储到localStorage，跨页面刷新保留记录
+            localStorage.setItem('visitTimestamps', JSON.stringify(visitTimestamps));
+        }
+        
+        // 检查访问频率是否超限
+        function checkRateLimit() {
+            // 从localStorage恢复访问记录
+            const storedTimestamps = localStorage.getItem('visitTimestamps');
+            if (storedTimestamps) {
+                visitTimestamps = JSON.parse(storedTimestamps);
+            }
+            
+            // 过滤出当前时间窗口内的访问记录
+            const now = Date.now();
+            const recentVisits = visitTimestamps.filter(timestamp => now - timestamp < RATE_WINDOW);
+            
+            // 如果访问次数超过限制，返回true
+            return recentVisits.length > RATE_LIMIT;
+        }
+        
+        // Cookie操作函数
+        function setCookie(name, value, days) {
+            const date = new Date();
+            date.setTime(date.getTime() + (days * 24 * 60 * 60 * 1000));
+            const expires = "expires=" + date.toUTCString();
+            document.cookie = name + "=" + value + ";" + expires + ";path=/";
+        }
+        
+        function getCookie(name) {
+            const cname = name + "=";
+            const decodedCookie = decodeURIComponent(document.cookie);
+            const ca = decodedCookie.split(';');
+            for(let i = 0; i <ca.length; i++) {
+                let c = ca[i];
+                while (c.charAt(0) == ' ') {
+                    c = c.substring(1);
+                }
+                if (c.indexOf(cname) == 0) {
+                    return c.substring(cname.length, c.length);
+                }
+            }
+            return "";
+        }
+        
+        // 爬虫检测函数
+        function detectCrawler() {
+            // 检测常见爬虫特征
+            const userAgent = navigator.userAgent.toLowerCase();
+            const crawlerKeywords = ['bot', 'crawler', 'spider', 'scraper', 'curl', 'wget'];
+            
+            // 检测是否为无头浏览器（爬虫常用）
+            const isHeadless = !window.navigator.webdriver ? false : true;
+            
+            // 检测页面渲染能力（爬虫通常不渲染JS）
+            const hasCanvas = !!document.createElement('canvas').getContext;
+            
+            // 如果满足爬虫特征，返回true
+            return crawlerKeywords.some(keyword => userAgent.includes(keyword)) || isHeadless || !hasCanvas;
+        }
+    </script>
+</body>
+</html>
